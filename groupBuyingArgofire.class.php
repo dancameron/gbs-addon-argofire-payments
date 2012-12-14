@@ -57,6 +57,9 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 
 		add_action( 'admin_init', array( $this, 'register_settings' ), 10, 0 );
 		add_action( 'purchase_completed', array( $this, 'complete_purchase' ), 10, 1 );
+		// Auth Capture, remove complete_purchase above
+		// add_action( 'purchase_completed', array( $this, 'capture_purchase' ), 10, 1 );
+		// add_action( self::CRON_HOOK, array( $this, 'capture_pending_payments' ) );
 
 		// Limitations
 		add_filter( 'group_buying_template_meta_boxes/deal-expiration.php', array( $this, 'display_exp_meta_box' ), 10 );
@@ -193,6 +196,95 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 			do_action( 'payment_captured', $payment, $items_captured );
 			do_action( 'payment_complete', $payment );
 			$payment->set_status( Group_Buying_Payment::STATUS_COMPLETE );
+		}
+	}
+
+	/**
+	 * Capture a pre-authorized payment
+	 *
+	 * @param Group_Buying_Purchase $purchase
+	 * @return void
+	 */
+	public function capture_purchase( Group_Buying_Purchase $purchase ) {
+		$payments = Group_Buying_Payment::get_payments_for_purchase( $purchase->get_id() );
+		foreach ( $payments as $payment_id ) {
+			$payment = Group_Buying_Payment::get_instance( $payment_id );
+			$this->capture_payment( $payment );
+		}
+	}
+
+	/**
+	 * Try to capture all pending payments
+	 *
+	 * @return void
+	 */
+	public function capture_pending_payments() {
+		$payments = Group_Buying_Payment::get_pending_payments();
+		foreach ( $payments as $payment_id ) {
+			$payment = Group_Buying_Payment::get_instance( $payment_id );
+			$this->capture_payment( $payment );
+		}
+	}
+
+	public  function capture_payment( Group_Buying_Payment $payment ) {
+		// is this the right payment processor? does the payment still need processing?
+		if ( $payment->get_payment_method() == $this->get_payment_method() && $payment->get_status() != Group_Buying_Payment::STATUS_COMPLETE ) {
+			$data = $payment->get_data();
+			// Do we have a transaction ID to use for the capture?
+			if ( isset( $data['api_response']['PNRef'] ) && $data['api_response']['PNRef'] ) {
+				$transaction_id = $data['api_response']['PNRef'];
+				$items_to_capture = $this->items_to_capture( $payment );
+				if ( $items_to_capture ) {
+					$status = ( count( $items_to_capture ) < count( $data['uncaptured_deals'] ) )?'NotComplete':'Complete';
+					
+					$post_data = $this->capture_txn_data( $transaction_id, $items_to_capture, $status );
+					
+					if ( self::DEBUG ) {
+						error_log( '----------ArgoFire DoCapture Request----------' );
+						error_log( print_r( $post_data, TRUE ) );
+					}
+					
+					$post_data_array = array();
+					foreach ( $post_data as $key => $value ) {
+						$post_data_array[] = $key . '='. $value;
+					}
+					$post_string = implode( "&", $post_data_array );
+					if ( self::DEBUG ) error_log( "post_string: " . print_r( $post_string, true ) );
+
+					$raw_response = wp_remote_post( $this->get_api_url(), array(
+							'method' => 'POST',
+							'body' => $post_string,
+							'timeout' => apply_filters( 'http_request_timeout', 15 ),
+							'sslverify' => false
+						) );
+
+
+					$xml = wp_remote_retrieve_body( $raw_response );
+					$response = json_decode(json_encode((array) simplexml_load_string($xml)), 1);
+
+					if ( self::DEBUG ) error_log( '----------ArgoFire Response----------' . print_r( $response, TRUE ) );
+
+
+					if ( !is_wp_error( $response ) && $response['Result'] != 0  ) {
+						
+						foreach ( $items_to_capture as $deal_id => $amount ) {
+							unset( $data['uncaptured_deals'][$deal_id] );
+						}
+						if ( !isset( $data['capture_response'] ) ) {
+							$data['capture_response'] = array();
+						}
+						$data['capture_response'][] = $response;
+						$payment->set_data( $data );
+						do_action( 'payment_captured', $payment, array_keys( $items_to_capture ) );
+						if ( $status == 'Complete' ) {
+							$payment->set_status( Group_Buying_Payment::STATUS_COMPLETE );
+							do_action( 'payment_complete', $payment );
+						} else {
+							$payment->set_status( Group_Buying_Payment::STATUS_PARTIAL );
+						}
+					}
+				}
+			}
 		}
 	}
 
