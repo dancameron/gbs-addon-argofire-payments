@@ -23,6 +23,7 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 	const API_PASSWORD_OPTION = 'gb_argofire_password';
 	const API_MODE_OPTION = 'gb_argofire_mode';
 	const PAYMENT_METHOD = 'Credit (ArgoFire)';
+	const AVS_CHECK = TRUE;
 	protected static $instance;
 	private $api_mode = self::MODE_TEST;
 	private $api_username = '';
@@ -131,7 +132,7 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 		}
 
 		if ( self::AVS_CHECK && $response['GetAVSResult'] != 'Y' ) {
-			$this->set_error_messages( 'AVS Failed:' . $response['GetAVSResultTXT'] );
+			$this->set_error_messages( 'AVS Failed: ' . $response['GetAVSResultTXT'] );
 			return FALSE;
 		}
 
@@ -198,7 +199,7 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 
 
 	/**
-	 * Grabs error messages from a Authorize response and displays them to the user
+	 * Grabs error messages from a ArgoFire response and displays them to the user
 	 *
 	 * @param array   $response
 	 * @param bool    $display
@@ -213,7 +214,7 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 	}
 
 	/**
-	 * Build the NVP data array for submitting the current checkout to Authorize as an Authorization request
+	 * Build the NVP data array for submitting the current checkout to ArgoFire as an Authorization request
 	 *
 	 * @param Group_Buying_Checkouts $checkout
 	 * @param Group_Buying_Purchase $purchase
@@ -284,7 +285,7 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 	public function register_settings() {
 		$page = Group_Buying_Payment_Processors::get_settings_page();
 		$section = 'gb_authorizenet_settings';
-		add_settings_section( $section, self::__( 'Authorize.net' ), array( $this, 'display_settings_section' ), $page );
+		add_settings_section( $section, self::__( 'ArgoFire' ), array( $this, 'display_settings_section' ), $page );
 		register_setting( $page, self::API_MODE_OPTION );
 		register_setting( $page, self::API_VENDER_OPTION );
 		register_setting( $page, self::API_MERCHANT_OPTION );
