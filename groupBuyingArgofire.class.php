@@ -23,7 +23,7 @@ class Group_Buying_ArgoFire extends Group_Buying_Credit_Card_Processors {
 	const API_PASSWORD_OPTION = 'gb_argofire_password';
 	const API_MODE_OPTION = 'gb_argofire_mode';
 	const PAYMENT_METHOD = 'Credit (ArgoFire)';
-	const AVS_CHECK = TRUE;
+	const AVS_CHECK = FALSE;
 	protected static $instance;
 	private $api_mode = self::MODE_TEST;
 	private $api_username = '';
